@@ -17,25 +17,52 @@ class CameraScreen extends StatefulWidget {
 
 class _CameraScreenState extends State<CameraScreen> {
   CameraController? _controller;
+
   bool _isReady = false;
   bool _isCapturing = false;
+  bool _isSwitchingCamera = false;
+
+  CameraLensDirection _currentDirection =
+      CameraLensDirection.front;
 
   @override
   void initState() {
     super.initState();
-    _initializeCamera();
+    _initializeCamera(_currentDirection);
   }
 
-  Future<void> _initializeCamera() async {
-    final camera = CameraService.frontCamera ??
-        CameraService.backCamera;
+  Future<void> _initializeCamera(
+    CameraLensDirection direction,
+  ) async {
+    final cameras = CameraService.cameras;
 
-    if (camera == null) {
+    if (cameras.isEmpty) {
       return;
     }
 
+    CameraDescription? selectedCamera;
+
+    for (final camera in cameras) {
+      if (camera.lensDirection == direction) {
+        selectedCamera = camera;
+        break;
+      }
+    }
+
+    selectedCamera ??= cameras.first;
+
+    final oldController = _controller;
+
+    if (mounted) {
+      setState(() {
+        _isReady = false;
+      });
+    }
+
+    await oldController?.dispose();
+
     final controller = CameraController(
-      camera,
+      selectedCamera,
       ResolutionPreset.medium,
       enableAudio: false,
     );
@@ -48,19 +75,57 @@ class _CameraScreenState extends State<CameraScreen> {
         return;
       }
 
+      _controller = controller;
+
       setState(() {
-        _controller = controller;
         _isReady = true;
+        _currentDirection = selectedCamera!.lensDirection;
       });
     } catch (e) {
       await controller.dispose();
+
+      if (!mounted) return;
+
+      setState(() {
+        _isReady = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Camera start nahi ho paya'),
+        ),
+      );
     }
+  }
+
+  Future<void> _switchCamera() async {
+    if (_isSwitchingCamera || CameraService.cameras.length < 2) {
+      return;
+    }
+
+    setState(() {
+      _isSwitchingCamera = true;
+    });
+
+    final newDirection =
+        _currentDirection == CameraLensDirection.front
+            ? CameraLensDirection.back
+            : CameraLensDirection.front;
+
+    await _initializeCamera(newDirection);
+
+    if (!mounted) return;
+
+    setState(() {
+      _isSwitchingCamera = false;
+    });
   }
 
   Future<void> _capturePhoto() async {
     if (!_isReady ||
         _controller == null ||
-        _isCapturing) {
+        _isCapturing ||
+        !_controller!.value.isInitialized) {
       return;
     }
 
@@ -79,7 +144,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Camera photo capture failed'),
+          content: Text('Photo capture failed'),
         ),
       );
     } finally {
@@ -101,15 +166,32 @@ class _CameraScreenState extends State<CameraScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
+
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
+
         title: Text(
-          widget.isPunchIn
-              ? 'PUNCH IN'
-              : 'PUNCH OUT',
+          widget.isPunchIn ? 'PUNCH IN' : 'PUNCH OUT',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
         ),
+
+        actions: [
+          if (CameraService.cameras.length >= 2)
+            IconButton(
+              onPressed:
+                  _isSwitchingCamera ? null : _switchCamera,
+              tooltip: 'Switch Camera',
+              icon: const Icon(
+                Icons.flip_camera_android,
+                size: 28,
+              ),
+            ),
+        ],
       ),
+
       body: _buildBody(),
     );
   }
@@ -138,6 +220,44 @@ class _CameraScreenState extends State<CameraScreen> {
                 width: 3,
               ),
               borderRadius: BorderRadius.circular(160),
+            ),
+          ),
+        ),
+
+        Positioned(
+          top: 20,
+          left: 20,
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 7,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _currentDirection ==
+                          CameraLensDirection.front
+                      ? Icons.camera_front
+                      : Icons.camera_rear,
+                  color: Colors.white,
+                  size: 18,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  _currentDirection ==
+                          CameraLensDirection.front
+                      ? 'Front Camera'
+                      : 'Back Camera',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
             ),
           ),
         ),

@@ -1,7 +1,31 @@
 import 'package:flutter/material.dart';
 
+import 'camera_screen.dart';
+
 class PunchingScreen extends StatelessWidget {
   const PunchingScreen({super.key});
+
+  Future<void> _openPunchInCamera(BuildContext context) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const CameraScreen(
+          isPunchIn: true,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openPunchOutCamera(BuildContext context) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const CameraScreen(
+          isPunchIn: false,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -9,7 +33,9 @@ class PunchingScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text(
           'ADHUNIK.01',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
         ),
         centerTitle: true,
         actions: [
@@ -30,7 +56,6 @@ class PunchingScreen extends StatelessWidget {
           ),
         ],
       ),
-
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -65,7 +90,9 @@ class PunchingScreen extends StatelessWidget {
                       title: 'PUNCH IN',
                       icon: Icons.login,
                       color: Colors.green,
-                      onPressed: () {},
+                      onPressed: () {
+                        _openPunchInCamera(context);
+                      },
                     ),
                   ),
 
@@ -76,7 +103,9 @@ class PunchingScreen extends StatelessWidget {
                       title: 'PUNCH OUT',
                       icon: Icons.logout,
                       color: Colors.red,
-                      onPressed: () {},
+                      onPressed: () {
+                        _openPunchOutCamera(context);
+                      },
                     ),
                   ),
                 ],
@@ -131,7 +160,10 @@ class _PunchButton extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 52),
+            Icon(
+              icon,
+              size: 52,
+            ),
             const SizedBox(height: 14),
             Text(
               title,

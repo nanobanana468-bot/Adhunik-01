@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'screens/punching_screen.dart';
 
 void main() {
   runApp(const AdhunikApp());
@@ -12,17 +13,10 @@ class AdhunikApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'ADHUNIK.01',
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('ADHUNIK.01'),
-        ),
-        body: const Center(
-          child: Text(
-            'ADHUNIK.01',
-            style: TextStyle(fontSize: 28),
-          ),
-        ),
+      theme: ThemeData(
+        useMaterial3: true,
       ),
+      home: const PunchingScreen(),
     );
   }
 }

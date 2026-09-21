@@ -2,37 +2,317 @@ import 'package:flutter/material.dart';
 
 import 'camera_screen.dart';
 import 'employee_registration.dart';
+import '../services/database_service.dart';
 
-class PunchingScreen extends StatelessWidget {
+class PunchingScreen extends StatefulWidget {
   const PunchingScreen({super.key});
 
-  Future<void> _openPunchInCamera(BuildContext context) async {
-    await Navigator.push(
+  @override
+  State<PunchingScreen> createState() =>
+      _PunchingScreenState();
+}
+
+class _PunchingScreenState extends State<PunchingScreen> {
+  bool _isProcessing = false;
+
+  Future<void> _openPunchCamera(
+    BuildContext context,
+    bool isPunchIn,
+  ) async {
+    if (_isProcessing) {
+      return;
+    }
+
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const CameraScreen(
-          isPunchIn: true,
+        builder: (_) => CameraScreen(
+          isPunchIn: isPunchIn,
         ),
       ),
     );
-  }
 
-  Future<void> _openPunchOutCamera(BuildContext context) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const CameraScreen(
-          isPunchIn: false,
-        ),
-      ),
+    if (!mounted || result == null) {
+      return;
+    }
+
+    if (result is! Map) {
+      return;
+    }
+
+    final photoPath = result['photoPath']?.toString();
+    final punchType = result['punchType']?.toString();
+    final capturedAt = result['capturedAt']?.toString();
+
+    if (photoPath == null ||
+        punchType == null ||
+        capturedAt == null) {
+      return;
+    }
+
+    await _selectEmployeeAndSavePunch(
+      photoPath: photoPath,
+      punchType: punchType,
+      capturedAt: capturedAt,
     );
   }
 
-  void _openEmployeeRegistration(BuildContext context) {
+  Future<void> _selectEmployeeAndSavePunch({
+    required String photoPath,
+    required String punchType,
+    required String capturedAt,
+  }) async {
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      final employees =
+          await DatabaseService.getEmployees(
+        activeOnly: true,
+      );
+
+      if (!mounted) return;
+
+      if (employees.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Pehle kam se kam ek employee register karein.',
+            ),
+          ),
+        );
+
+        setState(() {
+          _isProcessing = false;
+        });
+
+        return;
+      }
+
+      final selectedEmployee =
+          await showModalBottomSheet<
+              Map<String, dynamic>>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (context) {
+          return SafeArea(
+            child: SizedBox(
+              height:
+                  MediaQuery.of(context).size.height * 0.75,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      20,
+                      8,
+                      20,
+                      12,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          punchType == 'IN'
+                              ? Icons.login
+                              : Icons.logout,
+                          color: punchType == 'IN'
+                              ? Colors.green
+                              : Colors.red,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            punchType == 'IN'
+                                ? 'Select Employee - PUNCH IN'
+                                : 'Select Employee - PUNCH OUT',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: employees.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final employee =
+                            employees[index];
+
+                        return ListTile(
+                          leading: CircleAvatar(
+                            child: Text(
+                              employee['name']
+                                      .toString()
+                                      .isNotEmpty
+                                  ? employee['name']
+                                      .toString()[0]
+                                      .toUpperCase()
+                                  : '?',
+                            ),
+                          ),
+                          title: Text(
+                            employee['name'].toString(),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '${employee['punchingId']} • '
+                            '${employee['workerType']} • '
+                            '${employee['designation']}',
+                          ),
+                          trailing: Icon(
+                            punchType == 'IN'
+                                ? Icons.login
+                                : Icons.logout,
+                            color: punchType == 'IN'
+                                ? Colors.green
+                                : Colors.red,
+                          ),
+                          onTap: () {
+                            Navigator.pop(
+                              context,
+                              employee,
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+
+      if (!mounted) return;
+
+      if (selectedEmployee == null) {
+        setState(() {
+          _isProcessing = false;
+        });
+        return;
+      }
+
+      final employeePunchingId =
+          selectedEmployee['punchingId'].toString();
+
+      final employeeName =
+          selectedEmployee['name'].toString();
+
+      final uniquePunchId =
+          '${employeePunchingId}_${punchType}_'
+          '${DateTime.now().microsecondsSinceEpoch}';
+
+      final punchData = {
+        'punchId': uniquePunchId,
+        'employeePunchingId': employeePunchingId,
+        'employeeName': employeeName,
+        'punchType': punchType,
+        'punchTime': capturedAt,
+        'latitude': null,
+        'longitude': null,
+        'photoPath': photoPath,
+        'synced': 0,
+        'createdAt':
+            DateTime.now().toIso8601String(),
+      };
+
+      await DatabaseService.addPunch(
+        punchData,
+      );
+
+      if (!mounted) return;
+
+      await _showPunchSuccessCard(
+        employee: selectedEmployee,
+        punchType: punchType,
+        punchTime: DateTime.tryParse(
+              capturedAt,
+            ) ??
+            DateTime.now(),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Punch save nahi ho paya: $e',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _showPunchSuccessCard({
+    required Map<String, dynamic> employee,
+    required String punchType,
+    required DateTime punchTime,
+  }) async {
+    final isIn = punchType == 'IN';
+
+    final timeText =
+        '${punchTime.hour.toString().padLeft(2, '0')}:'
+        '${punchTime.minute.toString().padLeft(2, '0')}:'
+        '${punchTime.second.toString().padLeft(2, '0')}';
+
+    final overlay =
+        Overlay.of(context);
+
+    late OverlayEntry entry;
+
+    entry = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          top: 90,
+          left: 16,
+          right: 16,
+          child: Material(
+            color: Colors.transparent,
+            child: _PunchSuccessCard(
+              employee: employee,
+              punchType: punchType,
+              timeText: timeText,
+              isIn: isIn,
+            ),
+          ),
+        );
+      },
+    );
+
+    overlay.insert(entry);
+
+    await Future.delayed(
+      const Duration(seconds: 2),
+    );
+
+    entry.remove();
+  }
+
+  void _openEmployeeRegistration(
+    BuildContext context,
+  ) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const EmployeeRegistrationScreen(),
+        builder: (_) =>
+            const EmployeeRegistrationScreen(),
       ),
     );
   }
@@ -53,7 +333,9 @@ class PunchingScreen extends StatelessWidget {
             onPressed: () {
               _openEmployeeRegistration(context);
             },
-            icon: const Icon(Icons.person_add_alt_1),
+            icon: const Icon(
+              Icons.person_add_alt_1,
+            ),
             tooltip: 'Employee Registration',
           ),
           IconButton(
@@ -95,6 +377,14 @@ class PunchingScreen extends StatelessWidget {
 
               const Spacer(),
 
+              if (_isProcessing)
+                const Padding(
+                  padding: EdgeInsets.only(
+                    bottom: 20,
+                  ),
+                  child: CircularProgressIndicator(),
+                ),
+
               Row(
                 children: [
                   Expanded(
@@ -103,20 +393,24 @@ class PunchingScreen extends StatelessWidget {
                       icon: Icons.login,
                       color: Colors.green,
                       onPressed: () {
-                        _openPunchInCamera(context);
+                        _openPunchCamera(
+                          context,
+                          true,
+                        );
                       },
                     ),
                   ),
-
                   const SizedBox(width: 14),
-
                   Expanded(
                     child: _PunchButton(
                       title: 'PUNCH OUT',
                       icon: Icons.logout,
                       color: Colors.red,
                       onPressed: () {
-                        _openPunchOutCamera(context);
+                        _openPunchCamera(
+                          context,
+                          false,
+                        );
                       },
                     ),
                   ),
@@ -166,11 +460,13 @@ class _PunchButton extends StatelessWidget {
           foregroundColor: Colors.white,
           elevation: 6,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(22),
+            borderRadius:
+                BorderRadius.circular(22),
           ),
         ),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment:
+              MainAxisAlignment.center,
           children: [
             Icon(
               icon,
@@ -187,6 +483,112 @@ class _PunchButton extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _PunchSuccessCard extends StatelessWidget {
+  final Map<String, dynamic> employee;
+  final String punchType;
+  final String timeText;
+  final bool isIn;
+
+  const _PunchSuccessCard({
+    required this.employee,
+    required this.punchType,
+    required this.timeText,
+    required this.isIn,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(18),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 20,
+            spreadRadius: 2,
+            offset: Offset(0, 8),
+            color: Colors.black26,
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 30,
+            child: Text(
+              employee['name']
+                      .toString()
+                      .isNotEmpty
+                  ? employee['name']
+                      .toString()[0]
+                      .toUpperCase()
+                  : '?',
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Text(
+                  employee['name'].toString(),
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${employee['designation']} • '
+                  '${employee['workerType']}',
+                  style: const TextStyle(
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  timeText,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 9,
+            ),
+            decoration: BoxDecoration(
+              color: isIn
+                  ? Colors.green
+                  : Colors.red,
+              borderRadius:
+                  BorderRadius.circular(12),
+            ),
+            child: Text(
+              punchType,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

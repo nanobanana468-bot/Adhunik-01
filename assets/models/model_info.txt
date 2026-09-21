@@ -1,0 +1,4 @@
+Face Embedding Model
+Input: 112x112 RGB
+Output: 192-dimensional embedding
+Purpose: Offline employee face recognition

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'camera_screen.dart';
+import 'employee_registration.dart';
 
 class PunchingScreen extends StatelessWidget {
   const PunchingScreen({super.key});
@@ -27,6 +28,15 @@ class PunchingScreen extends StatelessWidget {
     );
   }
 
+  void _openEmployeeRegistration(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const EmployeeRegistrationScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -40,7 +50,9 @@ class PunchingScreen extends StatelessWidget {
         centerTitle: true,
         actions: [
           IconButton(
-            onPressed: () {},
+            onPressed: () {
+              _openEmployeeRegistration(context);
+            },
             icon: const Icon(Icons.person_add_alt_1),
             tooltip: 'Employee Registration',
           ),

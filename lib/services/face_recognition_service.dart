@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:math' as math;
 
 import 'package:tflite_flutter/tflite_flutter.dart';
 
@@ -6,13 +7,17 @@ class FaceRecognitionService {
   static Interpreter? _interpreter;
 
   static Future<void> initialize() async {
+    if (_interpreter != null) {
+      return;
+    }
+
     try {
-      _interpreter ??=
-          await Interpreter.fromAsset(
+      _interpreter = await Interpreter.fromAsset(
         'assets/models/face_embedding.tflite',
       );
     } catch (e) {
       _interpreter = null;
+
       throw Exception(
         'Face recognition model could not be loaded: $e',
       );
@@ -23,28 +28,58 @@ class FaceRecognitionService {
     return _interpreter != null;
   }
 
-  static Future<List<double>> generateEmbedding(
-    Float32List input,
-  ) async {
-    if (_interpreter == null) {
-      await initialize();
-    }
-
+  static List<int> get inputShape {
     if (_interpreter == null) {
       throw Exception(
         'Face recognition is not initialized.',
       );
     }
 
+    return _interpreter!.getInputTensor(0).shape;
+  }
+
+  static List<int> get outputShape {
+    if (_interpreter == null) {
+      throw Exception(
+        'Face recognition is not initialized.',
+      );
+    }
+
+    return _interpreter!.getOutputTensor(0).shape;
+  }
+
+  static Future<List<double>> generateEmbedding(
+    Float32List input,
+  ) async {
+    await initialize();
+
+    final interpreter = _interpreter;
+
+    if (interpreter == null) {
+      throw Exception(
+        'Face recognition is not initialized.',
+      );
+    }
+
+    final outputTensor =
+        interpreter.getOutputTensor(0);
+
+    final outputShape = outputTensor.shape;
+
+    final embeddingSize =
+        outputShape.isNotEmpty
+            ? outputShape.last
+            : 192;
+
     final output = List.generate(
       1,
       (_) => List<double>.filled(
-        192,
+        embeddingSize,
         0.0,
       ),
     );
 
-    _interpreter!.run(
+    interpreter.run(
       input,
       output,
     );
@@ -58,7 +93,9 @@ class FaceRecognitionService {
     List<double> a,
     List<double> b,
   ) {
-    if (a.isEmpty || b.isEmpty || a.length != b.length) {
+    if (a.isEmpty ||
+        b.isEmpty ||
+        a.length != b.length) {
       return 0.0;
     }
 
@@ -72,12 +109,12 @@ class FaceRecognitionService {
       normB += b[i] * b[i];
     }
 
-    if (normA == 0 || normB == 0) {
+    if (normA == 0.0 || normB == 0.0) {
       return 0.0;
     }
 
     return dot /
-        ((normA.sqrt()) * (normB.sqrt()));
+        (math.sqrt(normA) * math.sqrt(normB));
   }
 
   static bool isMatch(
@@ -96,21 +133,5 @@ class FaceRecognitionService {
   static Future<void> dispose() async {
     _interpreter?.close();
     _interpreter = null;
-  }
-}
-
-extension on double {
-  double sqrt() {
-    if (this <= 0) {
-      return 0.0;
-    }
-
-    double x = this;
-
-    for (int i = 0; i < 10; i++) {
-      x = 0.5 * (x + this / x);
-    }
-
-    return x;
   }
 }

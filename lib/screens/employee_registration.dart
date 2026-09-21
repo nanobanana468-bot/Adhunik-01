@@ -1,6 +1,9 @@
+       import 'dart:io';  
+       import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
 import '../models/employee.dart';
+import '../services/camera_service.dart';
 import '../services/database_service.dart';
 
 class EmployeeRegistrationScreen extends StatefulWidget {
@@ -27,6 +30,12 @@ class _EmployeeRegistrationScreenState
 
   bool _isSaving = false;
 
+  // Employee photo path.
+  String? _employeePhotoPath;
+
+  // Face registration placeholder for next module.
+  String? _faceData;
+
   @override
   void dispose() {
     _punchingIdController.dispose();
@@ -52,6 +61,46 @@ class _EmployeeRegistrationScreenState
     }
   }
 
+  Future<void> _captureEmployeePhoto() async {
+    final camera = CameraService.frontCamera;
+
+    if (camera == null) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Front camera is not available on this device.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+
+      return;
+    }
+
+    final photoPath = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EmployeePhotoCameraScreen(
+          camera: camera,
+        ),
+      ),
+    );
+
+    if (photoPath != null && photoPath.isNotEmpty) {
+      setState(() {
+        _employeePhotoPath = photoPath;
+      });
+    }
+  }
+
+  void _removeEmployeePhoto() {
+    setState(() {
+      _employeePhotoPath = null;
+    });
+  }
+
   Future<void> _registerEmployee() async {
     if (_isSaving) {
       return;
@@ -65,6 +114,19 @@ class _EmployeeRegistrationScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please select joining date'),
+        ),
+      );
+      return;
+    }
+
+    if (_employeePhotoPath == null ||
+        _employeePhotoPath!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please capture employee photo first.',
+          ),
+          backgroundColor: Colors.orange,
         ),
       );
       return;
@@ -92,6 +154,7 @@ class _EmployeeRegistrationScreenState
             content: Text(
               'This Punching ID is already registered.',
             ),
+            backgroundColor: Colors.red,
           ),
         );
 
@@ -111,8 +174,14 @@ class _EmployeeRegistrationScreenState
         mobile: _mobileController.text.trim(),
         joiningDate: _joiningDate!,
         shift: _shift,
-        photoPath: null,
-        faceData: null,
+
+        // Save captured employee photo.
+        photoPath: _employeePhotoPath,
+
+        // Face recognition data will be added
+        // in the next face-registration module.
+        faceData: _faceData,
+
         isActive: true,
       );
 
@@ -148,6 +217,8 @@ class _EmployeeRegistrationScreenState
         _workerType = 'WORKER';
         _shift = 'GENERAL';
         _joiningDate = null;
+        _employeePhotoPath = null;
+        _faceData = null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -224,6 +295,10 @@ class _EmployeeRegistrationScreenState
 
               const SizedBox(height: 24),
 
+              // --------------------------------------------------
+              // PUNCHING ID
+              // --------------------------------------------------
+
               TextFormField(
                 controller: _punchingIdController,
                 decoration: _inputDecoration(
@@ -235,11 +310,16 @@ class _EmployeeRegistrationScreenState
                       value.trim().isEmpty) {
                     return 'Enter punching ID';
                   }
+
                   return null;
                 },
               ),
 
               const SizedBox(height: 14),
+
+              // --------------------------------------------------
+              // EMPLOYEE NAME
+              // --------------------------------------------------
 
               TextFormField(
                 controller: _nameController,
@@ -252,11 +332,16 @@ class _EmployeeRegistrationScreenState
                       value.trim().isEmpty) {
                     return 'Enter employee name';
                   }
+
                   return null;
                 },
               ),
 
               const SizedBox(height: 14),
+
+              // --------------------------------------------------
+              // EMPLOYEE TYPE
+              // --------------------------------------------------
 
               DropdownButtonFormField<String>(
                 value: _workerType,
@@ -285,6 +370,10 @@ class _EmployeeRegistrationScreenState
 
               const SizedBox(height: 14),
 
+              // --------------------------------------------------
+              // DESIGNATION
+              // --------------------------------------------------
+
               TextFormField(
                 controller: _designationController,
                 decoration: _inputDecoration(
@@ -296,11 +385,16 @@ class _EmployeeRegistrationScreenState
                       value.trim().isEmpty) {
                     return 'Enter designation';
                   }
+
                   return null;
                 },
               ),
 
               const SizedBox(height: 14),
+
+              // --------------------------------------------------
+              // DEPARTMENT
+              // --------------------------------------------------
 
               TextFormField(
                 controller: _departmentController,
@@ -311,6 +405,10 @@ class _EmployeeRegistrationScreenState
               ),
 
               const SizedBox(height: 14),
+
+              // --------------------------------------------------
+              // MOBILE
+              // --------------------------------------------------
 
               TextFormField(
                 controller: _mobileController,
@@ -336,6 +434,10 @@ class _EmployeeRegistrationScreenState
 
               const SizedBox(height: 8),
 
+              // --------------------------------------------------
+              // JOINING DATE
+              // --------------------------------------------------
+
               InkWell(
                 onTap: _selectJoiningDate,
                 borderRadius: BorderRadius.circular(12),
@@ -353,6 +455,10 @@ class _EmployeeRegistrationScreenState
               ),
 
               const SizedBox(height: 14),
+
+              // --------------------------------------------------
+              // SHIFT
+              // --------------------------------------------------
 
               DropdownButtonFormField<String>(
                 value: _shift,
@@ -397,68 +503,191 @@ class _EmployeeRegistrationScreenState
 
               const SizedBox(height: 22),
 
-              // Employee Photo
+              // ==================================================
+              // EMPLOYEE PHOTO
+              // ==================================================
+
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   border: Border.all(
-                    color: Colors.grey,
+                    color: _employeePhotoPath != null
+                        ? Colors.green
+                        : Colors.grey,
+                    width: 1.5,
                   ),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius:
+                      BorderRadius.circular(14),
                 ),
-                child: const Column(
+                child: Column(
                   children: [
-                    Icon(
-                      Icons.photo_camera,
-                      size: 42,
-                    ),
-                    SizedBox(height: 8),
-                    Text(
+                    const Text(
                       'Employee Photo',
                       style: TextStyle(
-                        fontSize: 17,
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Text(
-                      'Photo capture will be added next',
-                      style: TextStyle(
-                        color: Colors.grey,
+
+                    const SizedBox(height: 14),
+
+                    if (_employeePhotoPath != null)
+                      ClipRRect(
+                        borderRadius:
+                            BorderRadius.circular(14),
+                        child: Image.file(
+                          FileImage(
+                            _employeePhotoPath!,
+                          ).file,
+                          width: 180,
+                          height: 180,
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                    else
+                      Container(
+                        width: 180,
+                        height: 180,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius:
+                              BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.grey.shade300,
+                          ),
+                        ),
+                        child: const Column(
+                          mainAxisAlignment:
+                              MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.person,
+                              size: 70,
+                              color: Colors.grey,
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'No Photo',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontWeight:
+                                    FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+
+                    const SizedBox(height: 14),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _isSaving
+                                ? null
+                                : _captureEmployeePhoto,
+                            icon: const Icon(
+                              Icons.camera_alt,
+                            ),
+                            label: Text(
+                              _employeePhotoPath == null
+                                  ? 'CAPTURE PHOTO'
+                                  : 'RETAKE PHOTO',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
+
+                    if (_employeePhotoPath != null) ...[
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: _isSaving
+                            ? null
+                            : _removeEmployeePhoto,
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.red,
+                        ),
+                        label: const Text(
+                          'REMOVE PHOTO',
+                          style: TextStyle(
+                            color: Colors.red,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
 
               const SizedBox(height: 14),
 
-              // Face Registration
+              // ==================================================
+              // FACE REGISTRATION
+              // ==================================================
+
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   border: Border.all(
                     color: Colors.grey,
                   ),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius:
+                      BorderRadius.circular(14),
                 ),
-                child: const Column(
+                child: Column(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.face_retouching_natural,
                       size: 42,
                     ),
-                    SizedBox(height: 8),
-                    Text(
+
+                    const SizedBox(height: 8),
+
+                    const Text(
                       'Face Registration',
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+
+                    const SizedBox(height: 5),
+
                     Text(
-                      'Face scan will be added next',
+                      _faceData == null
+                          ? 'Face scan will be added next'
+                          : 'Face registration completed',
                       style: TextStyle(
-                        color: Colors.grey,
+                        color: _faceData == null
+                            ? Colors.grey
+                            : Colors.green,
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    OutlinedButton.icon(
+                      onPressed: _isSaving
+                          ? null
+                          : () {
+                              ScaffoldMessenger.of(
+                                context,
+                              ).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Face registration module will be added next.',
+                                  ),
+                                ),
+                              );
+                            },
+                      icon: const Icon(
+                        Icons.face,
+                      ),
+                      label: const Text(
+                        'REGISTER FACE',
                       ),
                     ),
                   ],
@@ -466,6 +695,10 @@ class _EmployeeRegistrationScreenState
               ),
 
               const SizedBox(height: 26),
+
+              // ==================================================
+              // REGISTER BUTTON
+              // ==================================================
 
               SizedBox(
                 height: 56,
@@ -476,11 +709,14 @@ class _EmployeeRegistrationScreenState
                       ? const SizedBox(
                           width: 22,
                           height: 22,
-                          child: CircularProgressIndicator(
+                          child:
+                              CircularProgressIndicator(
                             strokeWidth: 2,
                           ),
                         )
-                      : const Icon(Icons.save),
+                      : const Icon(
+                          Icons.save,
+                        ),
                   label: Text(
                     _isSaving
                         ? 'SAVING...'
@@ -497,6 +733,221 @@ class _EmployeeRegistrationScreenState
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ================================================================
+// EMPLOYEE PHOTO CAMERA SCREEN
+// ================================================================
+
+class EmployeePhotoCameraScreen
+    extends StatefulWidget {
+  final CameraDescription camera;
+
+  const EmployeePhotoCameraScreen({
+    super.key,
+    required this.camera,
+  });
+
+  @override
+  State<EmployeePhotoCameraScreen> createState() =>
+      _EmployeePhotoCameraScreenState();
+}
+
+class _EmployeePhotoCameraScreenState
+    extends State<EmployeePhotoCameraScreen> {
+  CameraController? _controller;
+
+  bool _isReady = false;
+  bool _isCapturing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeCamera();
+  }
+
+  Future<void> _initializeCamera() async {
+    try {
+      final controller = CameraController(
+        widget.camera,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+
+      await controller.initialize();
+
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+
+      setState(() {
+        _controller = controller;
+        _isReady = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Camera error: $e',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _capturePhoto() async {
+    if (!_isReady ||
+        _controller == null ||
+        _isCapturing) {
+      return;
+    }
+
+    setState(() {
+      _isCapturing = true;
+    });
+
+    try {
+      final image =
+          await _controller!.takePicture();
+
+      if (!mounted) return;
+
+      Navigator.pop(
+        context,
+        image.path,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isCapturing = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Photo capture failed: $e',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: const Text(
+          'Capture Employee Photo',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        centerTitle: true,
+      ),
+      body: Stack(
+        children: [
+          if (_isReady && _controller != null)
+            Positioned.fill(
+              child: CameraPreview(
+                _controller!,
+              ),
+            )
+          else
+            const Center(
+              child: CircularProgressIndicator(
+                color: Colors.white,
+              ),
+            ),
+
+          // Face positioning guide.
+          Center(
+            child: Container(
+              width: 240,
+              height: 300,
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Colors.white,
+                  width: 3,
+                ),
+                borderRadius:
+                    BorderRadius.circular(120),
+              ),
+            ),
+          ),
+
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: 25,
+            child: Column(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(
+                      alpha: 0.70,
+                    ),
+                    borderRadius:
+                        BorderRadius.circular(14),
+                  ),
+                  child: const Text(
+                    'Keep the employee face inside the frame',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+
+                SizedBox(
+                  width: 74,
+                  height: 74,
+                  child: FloatingActionButton(
+                    heroTag: 'employee_photo_capture',
+                    onPressed:
+                        _isCapturing ||
+                                !_isReady
+                            ? null
+                            : _capturePhoto,
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                    child: _isCapturing
+                        ? const CircularProgressIndicator()
+                        : const Icon(
+                            Icons.camera_alt,
+                            size: 34,
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

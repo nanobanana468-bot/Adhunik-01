@@ -1,11 +1,12 @@
-       import 'dart:io';  
-       import 'package:camera/camera.dart';
+import 'dart:io';
+
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
 import '../models/employee.dart';
-import '../services/face_service.dart';
 import '../services/camera_service.dart';
 import '../services/database_service.dart';
+import '../services/face_service.dart';
 
 class EmployeeRegistrationScreen extends StatefulWidget {
   const EmployeeRegistrationScreen({super.key});
@@ -30,11 +31,9 @@ class _EmployeeRegistrationScreenState
   DateTime? _joiningDate;
 
   bool _isSaving = false;
+  bool _isFaceRegistering = false;
 
-  // Employee photo path.
   String? _employeePhotoPath;
-
-  // Face registration placeholder for next module.
   String? _faceData;
 
   @override
@@ -61,6 +60,10 @@ class _EmployeeRegistrationScreenState
       });
     }
   }
+
+  // ============================================================
+  // EMPLOYEE PHOTO
+  // ============================================================
 
   Future<void> _captureEmployeePhoto() async {
     final camera = CameraService.frontCamera;
@@ -92,6 +95,7 @@ class _EmployeeRegistrationScreenState
     if (photoPath != null && photoPath.isNotEmpty) {
       setState(() {
         _employeePhotoPath = photoPath;
+        _faceData = null;
       });
     }
   }
@@ -99,24 +103,16 @@ class _EmployeeRegistrationScreenState
   void _removeEmployeePhoto() {
     setState(() {
       _employeePhotoPath = null;
+      _faceData = null;
     });
   }
 
-  Future<void> _registerEmployee() async {
-    if (_isSaving) {
-      return;
-    }
+  // ============================================================
+  // FACE REGISTRATION
+  // ============================================================
 
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    if (_joiningDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select joining date'),
-        ),
-      );
+  Future<void> _registerFace() async {
+    if (_isFaceRegistering) {
       return;
     }
 
@@ -130,6 +126,124 @@ class _EmployeeRegistrationScreenState
           backgroundColor: Colors.orange,
         ),
       );
+
+      return;
+    }
+
+    setState(() {
+      _isFaceRegistering = true;
+    });
+
+    try {
+      final result = await FaceService.validateFace(
+        _employeePhotoPath!,
+      );
+
+      if (!mounted) return;
+
+      if (result != 'OK') {
+        setState(() {
+          _faceData = null;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result),
+            backgroundColor: Colors.red,
+          ),
+        );
+
+        return;
+      }
+
+      // Temporary face registration marker.
+      // Actual face embedding/matching will be added
+      // in the automatic face recognition module.
+      setState(() {
+        _faceData = 'FACE_REGISTERED';
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Face detected and registered successfully.',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _faceData = null;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Face registration failed: $e',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isFaceRegistering = false;
+        });
+      }
+    }
+  }
+
+  // ============================================================
+  // SAVE EMPLOYEE
+  // ============================================================
+
+  Future<void> _registerEmployee() async {
+    if (_isSaving) {
+      return;
+    }
+
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (_joiningDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please select joining date.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    if (_employeePhotoPath == null ||
+        _employeePhotoPath!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please capture employee photo first.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+
+      return;
+    }
+
+    if (_faceData == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please complete Face Registration first.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+
       return;
     }
 
@@ -141,7 +255,6 @@ class _EmployeeRegistrationScreenState
       final punchingId =
           _punchingIdController.text.trim();
 
-      // Check duplicate Punching ID.
       final existingEmployee =
           await DatabaseService.getEmployeeByPunchingId(
         punchingId,
@@ -159,10 +272,6 @@ class _EmployeeRegistrationScreenState
           ),
         );
 
-        setState(() {
-          _isSaving = false;
-        });
-
         return;
       }
 
@@ -175,20 +284,13 @@ class _EmployeeRegistrationScreenState
         mobile: _mobileController.text.trim(),
         joiningDate: _joiningDate!,
         shift: _shift,
-
-        // Save captured employee photo.
         photoPath: _employeePhotoPath,
-
-        // Face recognition data will be added
-        // in the next face-registration module.
         faceData: _faceData,
-
         isActive: true,
       );
 
       final employeeData = employee.toMap();
 
-      // Database needs createdAt for every employee.
       employeeData['createdAt'] =
           DateTime.now().toIso8601String();
 
@@ -207,20 +309,7 @@ class _EmployeeRegistrationScreenState
         ),
       );
 
-      // Clear form after successful registration.
-      _punchingIdController.clear();
-      _nameController.clear();
-      _designationController.clear();
-      _departmentController.clear();
-      _mobileController.clear();
-
-      setState(() {
-        _workerType = 'WORKER';
-        _shift = 'GENERAL';
-        _joiningDate = null;
-        _employeePhotoPath = null;
-        _faceData = null;
-      });
+      _clearForm();
     } catch (e) {
       if (!mounted) return;
 
@@ -241,6 +330,26 @@ class _EmployeeRegistrationScreenState
     }
   }
 
+  void _clearForm() {
+    _punchingIdController.clear();
+    _nameController.clear();
+    _designationController.clear();
+    _departmentController.clear();
+    _mobileController.clear();
+
+    setState(() {
+      _workerType = 'WORKER';
+      _shift = 'GENERAL';
+      _joiningDate = null;
+      _employeePhotoPath = null;
+      _faceData = null;
+    });
+  }
+
+  // ============================================================
+  // UI HELPERS
+  // ============================================================
+
   InputDecoration _inputDecoration(
     String label,
     IconData icon,
@@ -259,6 +368,10 @@ class _EmployeeRegistrationScreenState
         '${date.month.toString().padLeft(2, '0')}/'
         '${date.year}';
   }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -319,7 +432,7 @@ class _EmployeeRegistrationScreenState
               const SizedBox(height: 14),
 
               // --------------------------------------------------
-              // EMPLOYEE NAME
+              // NAME
               // --------------------------------------------------
 
               TextFormField(
@@ -341,7 +454,7 @@ class _EmployeeRegistrationScreenState
               const SizedBox(height: 14),
 
               // --------------------------------------------------
-              // EMPLOYEE TYPE
+              // TYPE
               // --------------------------------------------------
 
               DropdownButtonFormField<String>(
@@ -441,7 +554,8 @@ class _EmployeeRegistrationScreenState
 
               InkWell(
                 onTap: _selectJoiningDate,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius:
+                    BorderRadius.circular(12),
                 child: InputDecorator(
                   decoration: _inputDecoration(
                     'Joining Date',
@@ -450,7 +564,9 @@ class _EmployeeRegistrationScreenState
                   child: Text(
                     _joiningDate == null
                         ? 'Select joining date'
-                        : _formatDate(_joiningDate!),
+                        : _formatDate(
+                            _joiningDate!,
+                          ),
                   ),
                 ),
               ),
@@ -537,9 +653,7 @@ class _EmployeeRegistrationScreenState
                         borderRadius:
                             BorderRadius.circular(14),
                         child: Image.file(
-                          FileImage(
-                            _employeePhotoPath!,
-                          ).file,
+                          File(_employeePhotoPath!),
                           width: 180,
                           height: 180,
                           fit: BoxFit.cover,
@@ -581,28 +695,25 @@ class _EmployeeRegistrationScreenState
 
                     const SizedBox(height: 14),
 
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _isSaving
-                                ? null
-                                : _captureEmployeePhoto,
-                            icon: const Icon(
-                              Icons.camera_alt,
-                            ),
-                            label: Text(
-                              _employeePhotoPath == null
-                                  ? 'CAPTURE PHOTO'
-                                  : 'RETAKE PHOTO',
-                            ),
-                          ),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: _isSaving
+                            ? null
+                            : _captureEmployeePhoto,
+                        icon: const Icon(
+                          Icons.camera_alt,
                         ),
-                      ],
+                        label: Text(
+                          _employeePhotoPath == null
+                              ? 'CAPTURE PHOTO'
+                              : 'RETAKE PHOTO',
+                        ),
+                      ),
                     ),
 
-                    if (_employeePhotoPath != null) ...[
-                      const SizedBox(height: 8),
+                    if (_employeePhotoPath != null)
                       TextButton.icon(
                         onPressed: _isSaving
                             ? null
@@ -618,7 +729,6 @@ class _EmployeeRegistrationScreenState
                           ),
                         ),
                       ),
-                    ],
                   ],
                 ),
               ),
@@ -632,17 +742,30 @@ class _EmployeeRegistrationScreenState
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
+                  color: _faceData != null
+                      ? Colors.green.withValues(
+                          alpha: 0.05,
+                        )
+                      : null,
                   border: Border.all(
-                    color: Colors.grey,
+                    color: _faceData != null
+                        ? Colors.green
+                        : Colors.grey,
+                    width: 1.5,
                   ),
                   borderRadius:
                       BorderRadius.circular(14),
                 ),
                 child: Column(
                   children: [
-                    const Icon(
-                      Icons.face_retouching_natural,
-                      size: 42,
+                    Icon(
+                      _faceData != null
+                          ? Icons.verified
+                          : Icons.face_retouching_natural,
+                      size: 45,
+                      color: _faceData != null
+                          ? Colors.green
+                          : null,
                     ),
 
                     const SizedBox(height: 8),
@@ -658,37 +781,52 @@ class _EmployeeRegistrationScreenState
                     const SizedBox(height: 5),
 
                     Text(
-                      _faceData == null
-                          ? 'Face scan will be added next'
-                          : 'Face registration completed',
+                      _faceData != null
+                          ? 'Face registered successfully'
+                          : 'Register employee face',
                       style: TextStyle(
-                        color: _faceData == null
-                            ? Colors.grey
-                            : Colors.green,
+                        color: _faceData != null
+                            ? Colors.green
+                            : Colors.grey,
+                        fontWeight:
+                            _faceData != null
+                                ? FontWeight.w600
+                                : FontWeight.normal,
                       ),
                     ),
 
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
 
-                    OutlinedButton.icon(
-                      onPressed: _isSaving
-                          ? null
-                          : () {
-                              ScaffoldMessenger.of(
-                                context,
-                              ).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Face registration module will be added next.',
-                                  ),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: OutlinedButton.icon(
+                        onPressed:
+                            _isSaving ||
+                                    _isFaceRegistering
+                                ? null
+                                : _registerFace,
+                        icon: _isFaceRegistering
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child:
+                                    CircularProgressIndicator(
+                                  strokeWidth: 2,
                                 ),
-                              );
-                            },
-                      icon: const Icon(
-                        Icons.face,
-                      ),
-                      label: const Text(
-                        'REGISTER FACE',
+                              )
+                            : Icon(
+                                _faceData != null
+                                    ? Icons.refresh
+                                    : Icons.face,
+                              ),
+                        label: Text(
+                          _isFaceRegistering
+                              ? 'CHECKING FACE...'
+                              : _faceData != null
+                                  ? 'REGISTER AGAIN'
+                                  : 'REGISTER FACE',
+                        ),
                       ),
                     ),
                   ],
@@ -698,14 +836,16 @@ class _EmployeeRegistrationScreenState
               const SizedBox(height: 26),
 
               // ==================================================
-              // REGISTER BUTTON
+              // REGISTER EMPLOYEE
               // ==================================================
 
               SizedBox(
-                height: 56,
+                height: 58,
                 child: ElevatedButton.icon(
                   onPressed:
-                      _isSaving ? null : _registerEmployee,
+                      _isSaving
+                          ? null
+                          : _registerEmployee,
                   icon: _isSaving
                       ? const SizedBox(
                           width: 22,
@@ -739,9 +879,9 @@ class _EmployeeRegistrationScreenState
   }
 }
 
-// ================================================================
-// EMPLOYEE PHOTO CAMERA SCREEN
-// ================================================================
+// ==================================================================
+// EMPLOYEE PHOTO CAMERA
+// ==================================================================
 
 class EmployeePhotoCameraScreen
     extends StatefulWidget {
@@ -865,7 +1005,8 @@ class _EmployeePhotoCameraScreenState
       ),
       body: Stack(
         children: [
-          if (_isReady && _controller != null)
+          if (_isReady &&
+              _controller != null)
             Positioned.fill(
               child: CameraPreview(
                 _controller!,
@@ -878,7 +1019,7 @@ class _EmployeePhotoCameraScreenState
               ),
             ),
 
-          // Face positioning guide.
+          // Face guide.
           Center(
             child: Container(
               width: 240,
@@ -929,7 +1070,8 @@ class _EmployeePhotoCameraScreenState
                   width: 74,
                   height: 74,
                   child: FloatingActionButton(
-                    heroTag: 'employee_photo_capture',
+                    heroTag:
+                        'employee_photo_capture',
                     onPressed:
                         _isCapturing ||
                                 !_isReady

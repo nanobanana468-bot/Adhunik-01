@@ -19,6 +19,22 @@ jobs:
       - name: Create Android project structure
         run: flutter create . --platforms=android
 
+      - name: Configure Java and Kotlin JVM 17
+        working-directory: android
+        run: |
+          cat >> build.gradle <<'EOF'
+
+          subprojects {
+              tasks.withType(JavaCompile).configureEach {
+                  options.release = 17
+              }
+
+              tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                  kotlinOptions.jvmTarget = "17"
+              }
+          }
+          EOF
+
       - name: Get dependencies
         run: flutter pub get
 

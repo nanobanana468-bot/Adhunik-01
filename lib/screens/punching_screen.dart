@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'camera_screen.dart';
 import 'employee_registration.dart';
+import 'history/punch_history.dart';
 import '../services/database_service.dart';
 
 class PunchingScreen extends StatefulWidget {
@@ -272,8 +273,7 @@ class _PunchingScreenState extends State<PunchingScreen> {
         '${punchTime.minute.toString().padLeft(2, '0')}:'
         '${punchTime.second.toString().padLeft(2, '0')}';
 
-    final overlay =
-        Overlay.of(context);
+    final overlay = Overlay.of(context);
 
     late OverlayEntry entry;
 
@@ -302,7 +302,9 @@ class _PunchingScreenState extends State<PunchingScreen> {
       const Duration(seconds: 2),
     );
 
-    entry.remove();
+    if (entry.mounted) {
+      entry.remove();
+    }
   }
 
   void _openEmployeeRegistration(
@@ -313,6 +315,18 @@ class _PunchingScreenState extends State<PunchingScreen> {
       MaterialPageRoute(
         builder: (_) =>
             const EmployeeRegistrationScreen(),
+      ),
+    );
+  }
+
+  void _openHistory(
+    BuildContext context,
+  ) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const PunchHistoryScreen(),
       ),
     );
   }
@@ -338,14 +352,22 @@ class _PunchingScreenState extends State<PunchingScreen> {
             ),
             tooltip: 'Employee Registration',
           ),
+
           IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.history),
-            tooltip: 'History',
+            onPressed: () {
+              _openHistory(context);
+            },
+            icon: const Icon(
+              Icons.history,
+            ),
+            tooltip: 'Punch History',
           ),
+
           IconButton(
             onPressed: () {},
-            icon: const Icon(Icons.settings),
+            icon: const Icon(
+              Icons.settings,
+            ),
             tooltip: 'Settings',
           ),
         ],
@@ -400,7 +422,9 @@ class _PunchingScreenState extends State<PunchingScreen> {
                       },
                     ),
                   ),
+
                   const SizedBox(width: 14),
+
                   Expanded(
                     child: _PunchButton(
                       title: 'PUNCH OUT',
@@ -536,7 +560,9 @@ class _PunchSuccessCard extends StatelessWidget {
               ),
             ),
           ),
+
           const SizedBox(width: 14),
+
           Expanded(
             child: Column(
               crossAxisAlignment:
@@ -549,7 +575,9 @@ class _PunchSuccessCard extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+
                 const SizedBox(height: 3),
+
                 Text(
                   '${employee['designation']} • '
                   '${employee['workerType']}',
@@ -557,7 +585,9 @@ class _PunchSuccessCard extends StatelessWidget {
                     color: Colors.grey,
                   ),
                 ),
+
                 const SizedBox(height: 5),
+
                 Text(
                   timeText,
                   style: const TextStyle(
@@ -567,6 +597,7 @@ class _PunchSuccessCard extends StatelessWidget {
               ],
             ),
           ),
+
           Container(
             padding:
                 const EdgeInsets.symmetric(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/employee.dart';
+import '../services/database_service.dart';
 
 class EmployeeRegistrationScreen extends StatefulWidget {
   const EmployeeRegistrationScreen({super.key});
@@ -23,6 +24,8 @@ class _EmployeeRegistrationScreenState
   String _workerType = 'WORKER';
   String _shift = 'GENERAL';
   DateTime? _joiningDate;
+
+  bool _isSaving = false;
 
   @override
   void dispose() {
@@ -49,7 +52,11 @@ class _EmployeeRegistrationScreenState
     }
   }
 
-  void _registerEmployee() {
+  Future<void> _registerEmployee() async {
+    if (_isSaving) {
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -63,26 +70,103 @@ class _EmployeeRegistrationScreenState
       return;
     }
 
-    final employee = Employee(
-      punchingId: _punchingIdController.text.trim(),
-      name: _nameController.text.trim(),
-      workerType: _workerType,
-      designation: _designationController.text.trim(),
-      department: _departmentController.text.trim(),
-      mobile: _mobileController.text.trim(),
-      joiningDate: _joiningDate!,
-      shift: _shift,
-    );
+    setState(() {
+      _isSaving = true;
+    });
 
-    debugPrint(employee.toMap().toString());
+    try {
+      final punchingId =
+          _punchingIdController.text.trim();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Employee details ready. Database will be connected next.',
+      // Check duplicate Punching ID.
+      final existingEmployee =
+          await DatabaseService.getEmployeeByPunchingId(
+        punchingId,
+      );
+
+      if (existingEmployee != null) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'This Punching ID is already registered.',
+            ),
+          ),
+        );
+
+        setState(() {
+          _isSaving = false;
+        });
+
+        return;
+      }
+
+      final employee = Employee(
+        punchingId: punchingId,
+        name: _nameController.text.trim(),
+        workerType: _workerType,
+        designation: _designationController.text.trim(),
+        department: _departmentController.text.trim(),
+        mobile: _mobileController.text.trim(),
+        joiningDate: _joiningDate!,
+        shift: _shift,
+        photoPath: null,
+        faceData: null,
+        isActive: true,
+      );
+
+      final employeeData = employee.toMap();
+
+      // Database needs createdAt for every employee.
+      employeeData['createdAt'] =
+          DateTime.now().toIso8601String();
+
+      await DatabaseService.addEmployee(
+        employeeData,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${employee.name} registered successfully.',
+          ),
+          backgroundColor: Colors.green,
         ),
-      ),
-    );
+      );
+
+      // Clear form after successful registration.
+      _punchingIdController.clear();
+      _nameController.clear();
+      _designationController.clear();
+      _departmentController.clear();
+      _mobileController.clear();
+
+      setState(() {
+        _workerType = 'WORKER';
+        _shift = 'GENERAL';
+        _joiningDate = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Registration failed: $e',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
   }
 
   InputDecoration _inputDecoration(
@@ -98,13 +182,21 @@ class _EmployeeRegistrationScreenState
     );
   }
 
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/'
+        '${date.month.toString().padLeft(2, '0')}/'
+        '${date.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
           'Employee Registration',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
         ),
         centerTitle: true,
       ),
@@ -139,7 +231,8 @@ class _EmployeeRegistrationScreenState
                   Icons.badge,
                 ),
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
+                  if (value == null ||
+                      value.trim().isEmpty) {
                     return 'Enter punching ID';
                   }
                   return null;
@@ -155,7 +248,8 @@ class _EmployeeRegistrationScreenState
                   Icons.person,
                 ),
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
+                  if (value == null ||
+                      value.trim().isEmpty) {
                     return 'Enter employee name';
                   }
                   return null;
@@ -198,7 +292,8 @@ class _EmployeeRegistrationScreenState
                   Icons.work,
                 ),
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
+                  if (value == null ||
+                      value.trim().isEmpty) {
                     return 'Enter designation';
                   }
                   return null;
@@ -226,7 +321,8 @@ class _EmployeeRegistrationScreenState
                   Icons.phone,
                 ),
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
+                  if (value == null ||
+                      value.trim().isEmpty) {
                     return 'Enter mobile number';
                   }
 
@@ -251,9 +347,7 @@ class _EmployeeRegistrationScreenState
                   child: Text(
                     _joiningDate == null
                         ? 'Select joining date'
-                        : '${_joiningDate!.day.toString().padLeft(2, '0')}/'
-                            '${_joiningDate!.month.toString().padLeft(2, '0')}/'
-                            '${_joiningDate!.year}',
+                        : _formatDate(_joiningDate!),
                   ),
                 ),
               ),
@@ -303,10 +397,13 @@ class _EmployeeRegistrationScreenState
 
               const SizedBox(height: 22),
 
+              // Employee Photo
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
+                  border: Border.all(
+                    color: Colors.grey,
+                  ),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Column(
@@ -325,7 +422,9 @@ class _EmployeeRegistrationScreenState
                     ),
                     Text(
                       'Photo capture will be added next',
-                      style: TextStyle(color: Colors.grey),
+                      style: TextStyle(
+                        color: Colors.grey,
+                      ),
                     ),
                   ],
                 ),
@@ -333,10 +432,13 @@ class _EmployeeRegistrationScreenState
 
               const SizedBox(height: 14),
 
+              // Face Registration
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
+                  border: Border.all(
+                    color: Colors.grey,
+                  ),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Column(
@@ -355,7 +457,9 @@ class _EmployeeRegistrationScreenState
                     ),
                     Text(
                       'Face scan will be added next',
-                      style: TextStyle(color: Colors.grey),
+                      style: TextStyle(
+                        color: Colors.grey,
+                      ),
                     ),
                   ],
                 ),
@@ -366,11 +470,22 @@ class _EmployeeRegistrationScreenState
               SizedBox(
                 height: 56,
                 child: ElevatedButton.icon(
-                  onPressed: _registerEmployee,
-                  icon: const Icon(Icons.save),
-                  label: const Text(
-                    'REGISTER EMPLOYEE',
-                    style: TextStyle(
+                  onPressed:
+                      _isSaving ? null : _registerEmployee,
+                  icon: _isSaving
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Icon(Icons.save),
+                  label: Text(
+                    _isSaving
+                        ? 'SAVING...'
+                        : 'REGISTER EMPLOYEE',
+                    style: const TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.bold,
                     ),

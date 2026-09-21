@@ -37,6 +37,11 @@ class _CameraScreenState extends State<CameraScreen> {
     final cameras = CameraService.cameras;
 
     if (cameras.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _isReady = false;
+        });
+      }
       return;
     }
 
@@ -79,7 +84,8 @@ class _CameraScreenState extends State<CameraScreen> {
 
       setState(() {
         _isReady = true;
-        _currentDirection = selectedCamera!.lensDirection;
+        _currentDirection =
+            selectedCamera!.lensDirection;
       });
     } catch (e) {
       await controller.dispose();
@@ -92,14 +98,17 @@ class _CameraScreenState extends State<CameraScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Camera start nahi ho paya'),
+          content: Text(
+            'Camera start nahi ho paya.',
+          ),
         ),
       );
     }
   }
 
   Future<void> _switchCamera() async {
-    if (_isSwitchingCamera || CameraService.cameras.length < 2) {
+    if (_isSwitchingCamera ||
+        CameraService.cameras.length < 2) {
       return;
     }
 
@@ -108,7 +117,8 @@ class _CameraScreenState extends State<CameraScreen> {
     });
 
     final newDirection =
-        _currentDirection == CameraLensDirection.front
+        _currentDirection ==
+                CameraLensDirection.front
             ? CameraLensDirection.back
             : CameraLensDirection.front;
 
@@ -138,13 +148,35 @@ class _CameraScreenState extends State<CameraScreen> {
 
       if (!mounted) return;
 
-      Navigator.pop(context, photo.path);
+      /*
+       * Camera capture result.
+       *
+       * punchType:
+       * IN  = Punch In
+       * OUT = Punch Out
+       *
+       * capturedAt is the ORIGINAL camera punch time.
+       * It will later be saved permanently with the punch record.
+       */
+      Navigator.pop(
+        context,
+        {
+          'photoPath': photo.path,
+          'punchType': widget.isPunchIn
+              ? 'IN'
+              : 'OUT',
+          'capturedAt':
+              DateTime.now().toIso8601String(),
+        },
+      );
     } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Photo capture failed'),
+          content: Text(
+            'Photo capture failed.',
+          ),
         ),
       );
     } finally {
@@ -166,23 +198,23 @@ class _CameraScreenState extends State<CameraScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-
         title: Text(
-          widget.isPunchIn ? 'PUNCH IN' : 'PUNCH OUT',
+          widget.isPunchIn
+              ? 'PUNCH IN'
+              : 'PUNCH OUT',
           style: const TextStyle(
             fontWeight: FontWeight.bold,
           ),
         ),
-
         actions: [
           if (CameraService.cameras.length >= 2)
             IconButton(
-              onPressed:
-                  _isSwitchingCamera ? null : _switchCamera,
+              onPressed: _isSwitchingCamera
+                  ? null
+                  : _switchCamera,
               tooltip: 'Switch Camera',
               icon: const Icon(
                 Icons.flip_camera_android,
@@ -191,7 +223,6 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
         ],
       ),
-
       body: _buildBody(),
     );
   }
@@ -219,7 +250,8 @@ class _CameraScreenState extends State<CameraScreen> {
                 color: Colors.white,
                 width: 3,
               ),
-              borderRadius: BorderRadius.circular(160),
+              borderRadius:
+                  BorderRadius.circular(160),
             ),
           ),
         ),
@@ -228,13 +260,17 @@ class _CameraScreenState extends State<CameraScreen> {
           top: 20,
           left: 20,
           child: Container(
-            padding: const EdgeInsets.symmetric(
+            padding:
+                const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 7,
             ),
             decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.55),
-              borderRadius: BorderRadius.circular(20),
+              color: Colors.black.withValues(
+                alpha: 0.55,
+              ),
+              borderRadius:
+                  BorderRadius.circular(20),
             ),
             child: Row(
               children: [
@@ -263,6 +299,34 @@ class _CameraScreenState extends State<CameraScreen> {
         ),
 
         Positioned(
+          top: 20,
+          right: 20,
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 7,
+            ),
+            decoration: BoxDecoration(
+              color: widget.isPunchIn
+                  ? Colors.green
+                  : Colors.red,
+              borderRadius:
+                  BorderRadius.circular(20),
+            ),
+            child: Text(
+              widget.isPunchIn
+                  ? 'PUNCH IN'
+                  : 'PUNCH OUT',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+
+        Positioned(
           bottom: 35,
           left: 0,
           right: 0,
@@ -284,8 +348,10 @@ class _CameraScreenState extends State<CameraScreen> {
                 ),
                 child: _isCapturing
                     ? const Padding(
-                        padding: EdgeInsets.all(22),
-                        child: CircularProgressIndicator(
+                        padding:
+                            EdgeInsets.all(22),
+                        child:
+                            CircularProgressIndicator(
                           color: Colors.white,
                           strokeWidth: 3,
                         ),
